@@ -97,7 +97,8 @@ struct ssd_info *initiation(struct ssd_info *ssd)
     //strncpy(ssd->tracefilename,"example.ascii",25);
     printf("\ninput trace file name:");
     scanf("%s",ssd->tracefilename);
-    strncpy(ssd->outputfilename,"ex.out",7);
+
+    strncpy(ssd->outputfilename,"ex.out",17);
     strncpy(ssd->statisticfilename,"statistic10.dat",16);
     strncpy(ssd->statisticfilename2,"statistic2.dat",15);
 
@@ -138,6 +139,12 @@ struct ssd_info *initiation(struct ssd_info *ssd)
 
     printf("\n");
 
+    ssd->dabiao=fopen("dabiao.txt","w");
+    if(ssd->dabiao==NULL)
+    {
+        printf("the dabiao file can't open\n");
+        return NULL;
+    }
 
     fprintf(ssd->outputfile,"parameter file: %s\n",ssd->parameterfilename); 
     fprintf(ssd->outputfile,"trace file: %s\n",ssd->tracefilename);
@@ -146,6 +153,7 @@ struct ssd_info *initiation(struct ssd_info *ssd)
 
     fflush(ssd->outputfile);
     fflush(ssd->statisticfile);
+
 
     fp=fopen(ssd->parameterfilename,"r");
     if(fp==NULL)
@@ -356,7 +364,7 @@ struct parameter_value *load_parameters(char parameter_file[30])
     p = (struct parameter_value *)malloc(sizeof(struct parameter_value));
     alloc_assert(p,"parameter_value");
     memset(p,0,sizeof(struct parameter_value));
-    p->queue_length=5;
+    p->queue_length=32;
     memset(buf,0,BUFSIZE);
 
     fp=fopen(parameter_file,"r");

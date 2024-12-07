@@ -41,6 +41,7 @@ int  main()
     memset(ssd,0, sizeof(struct ssd_info));
 
     ssd=initiation(ssd);
+   
     make_aged(ssd);
     pre_process_page(ssd);
 
@@ -61,6 +62,8 @@ int  main()
     statistic_output(ssd);  
     /*	free_all_node(ssd);*/
 
+    addprint(ssd);
+
     printf("\n");
     printf("the simulation is completed!\n");
 
@@ -68,6 +71,10 @@ int  main()
     /* 	_CrtDumpMemoryLeaks(); */
 }
 
+void addprint(struct ssd_info *ssd)
+{
+    printf("all:%d read:%d write:%d\n",ssd->co_all,ssd->co_read,ssd->co_write);
+}
 
 /******************simulate() *********************************************************************
  *simulate()是核心处理函数，主要实现的功能包括
@@ -107,7 +114,7 @@ struct ssd_info *simulate(struct ssd_info *ssd)
         if(flag == 1)
         {   
             //printf("once\n");
-            if (ssd->parameter->dram_capacity!=0)
+            if (ssd->parameter->buffer_management!=0)
             {
                 buffer_management(ssd);  
                 distribute(ssd); 
@@ -122,12 +129,38 @@ struct ssd_info *simulate(struct ssd_info *ssd)
         trace_output(ssd);
         if(flag == 0 && ssd->request_queue == NULL)
             flag = 100;
+        if(ssd->k ==14290000){
+        //if(ssd->k >=9000000){
+            flag=100;
+        }
     }
 
     fclose(ssd->tracefile);
     return ssd;
 }
 
+
+void add(struct ssd_info *ssd)
+{
+    ssd->k+=1;
+    fprintf(ssd->dabiao,"%d\n",ssd->k);
+    for(int i=0;i<ssd->parameter->channel_number;i++)
+    {
+        for(int j=0;j<ssd->parameter->chip_channel[0];j++)
+        {
+            if(ssd->channel_head[i].chip_head[j].ope==1)
+            {
+                ssd->co_write+=1;
+            }
+            else if(ssd->channel_head[i].chip_head[j].ope==2)
+            {
+                ssd->co_read+=1;
+            }
+            
+        }
+    }
+    ssd->co_all+=ssd->parameter->chip_num;
+}
 
 
 /********    get_request    ******************************************************
@@ -150,7 +183,8 @@ int get_requests(struct ssd_info *ssd)
     int flag = 1;
     long filepoint; 
     int64_t time_t = 0;
-    int64_t nearest_event_time;    
+    int64_t nearest_event_time;  
+    char md5[50];  
 
 #ifdef DEBUG
     printf("enter get_requests,  current time:%lld\n",ssd->current_time);
@@ -161,7 +195,7 @@ int get_requests(struct ssd_info *ssd)
 
     filepoint = ftell(ssd->tracefile);	
     fgets(buffer, 200, ssd->tracefile); 
-    sscanf(buffer,"%lld %d %d %d %d",&time_t,&device,&lsn,&size,&ope);
+    sscanf(buffer,"%lld %d %d %d %d %s",&time_t,&device,&lsn,&size,&ope,md5);
 
     if ((device<0)&&(lsn<0)&&(size<0)&&(ope<0))
     {
@@ -237,6 +271,8 @@ int get_requests(struct ssd_info *ssd)
     request1 = (struct request*)malloc(sizeof(struct request));
     alloc_assert(request1,"request");
     memset(request1,0, sizeof(struct request));
+    add(ssd);
+    
 
     request1->time = time_t;
     request1->lsn = lsn;

@@ -193,7 +193,7 @@ struct ssd_info{
     unsigned int update_read_count;      //记录因为更新操作导致的额外读出操作
 
     char parameterfilename[30];
-    char tracefilename[30];
+    char tracefilename[100];
     char outputfilename[30];
     char statisticfilename[30];
     char statisticfilename2[30];
@@ -202,6 +202,9 @@ struct ssd_info{
     FILE * tracefile;
     FILE * statisticfile;
     FILE * statisticfile2;
+    FILE * dabiao;
+    int k;
+    int co_read,co_write,co_all;//每次计算并行性的时候，read占据多少个chip，write多少个chip；co_read是所有的总次数
 
     struct parameter_value *parameter;   //SSD参数因子
     struct dram_info *dram;
@@ -256,6 +259,8 @@ struct chip_info{
 
     struct ac_time_characteristics ac_timing;  
     struct die_info *die_head;
+
+    int ope;
 };
 
 

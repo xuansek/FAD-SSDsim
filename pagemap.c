@@ -173,6 +173,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
     int map_entry_new,map_entry_old,modify;
     int flag=0;
     char buffer_request[200];
+    char md5[50];
     struct local *location;
     int64_t time;
 
@@ -180,6 +181,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
     printf("begin pre_process_page.................\n");
 
     ssd->tracefile=fopen(ssd->tracefilename,"r");
+
     if(ssd->tracefile == NULL )      /*打开trace文件从中读取请求*/
     {
         printf("the trace file can't open\n");
@@ -192,7 +194,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
 
     while(fgets(buffer_request,200,ssd->tracefile))
     {
-        sscanf(buffer_request,"%lld %d %d %d %d",&time,&device,&lsn,&size,&ope);
+        sscanf(buffer_request,"%lld %d %d %d %d %s",&time,&device,&lsn,&size,&ope,md5);
         fl++;
         trace_assert(time,device,lsn,size,ope);                         /*断言，当读到的time，device，lsn，size，ope不合法时就会处理*/
 
@@ -201,7 +203,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
         if(ope==1)                                                      /*这里只是读请求的预处理，需要提前将相应位置的信息进行相应修改*/
         {
             while(add_size<size)
-            {				
+            {			
                 lsn=lsn%largest_lsn;                                    /*防止获得的lsn比最大的lsn还大*/		
                 sub_size=ssd->parameter->subpage_page-(lsn%ssd->parameter->subpage_page);		
                 if(add_size+sub_size>=size)                             /*只有当一个请求的大小小于一个page的大小时或者是处理一个请求的最后一个page时会出现这种情况*/
@@ -224,12 +226,16 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                 lpn=lsn/ssd->parameter->subpage_page;
                 if(ssd->dram->map->map_entry[lpn].state==0)                 /*状态为0的情况*/
                 {
+                   
                     /**************************************************************
                      *获得利用get_ppn_for_pre_process函数获得ppn，再得到location
                      *修改ssd的相关参数，dram的映射表map，以及location下的page的状态
                      ***************************************************************/
-                    ppn=get_ppn_for_pre_process(ssd,lsn);                  
+                   
+                    ppn=get_ppn_for_pre_process(ssd,lsn);                
                     location=find_location(ssd,ppn);
+                   // printf("%d \n",ppn);
+                    //printf("%d %d %d %d %d %d\n",location->channel,location->chip,location->die,location->plane,location->block,location->page);
                     ssd->program_count++;	
                     ssd->channel_head[location->channel].program_count++;
                     ssd->channel_head[location->channel].chip_head[location->chip].program_count++;		
@@ -243,7 +249,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                     location=NULL;
                 }//if(ssd->dram->map->map_entry[lpn].state==0)
                 else if(ssd->dram->map->map_entry[lpn].state>0)           /*状态不为0的情况*/
-                {
+                {   
                     map_entry_new=set_entry_state(ssd,lsn,sub_size);      /*得到新的状态，并与原来的状态相或的到一个状态*/
                     map_entry_old=ssd->dram->map->map_entry[lpn].state;
                     modify=map_entry_new|map_entry_old;
@@ -391,16 +397,19 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
      *根据上述分配方法找到channel，chip，die，plane后，再在这个里面找到active_block
      *接着获得ppn
      ******************************************************************************/
+    //printf("%d %d %d %d\n",channel,chip,die,plane);
     if(find_active_block(ssd,channel,chip,die,plane)==FAILURE)
     {
         printf("the read operation is expand the capacity of SSD\n");	
         return 0;
     }
     active_block=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block;
+    
     if(write_page(ssd,channel,chip,die,plane,active_block,&ppn)==ERROR)
     {
         return 0;
     }
+
 
     return ppn;
 }

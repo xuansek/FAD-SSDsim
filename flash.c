@@ -547,6 +547,7 @@ Status  find_active_block(struct ssd_info *ssd,unsigned int channel,unsigned int
         free_page_num=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num;
         count++;
     }
+    //printf("%d %d %d %d %d\n",channel,chip,die,plane,active_block);
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block=active_block;
     if(count<ssd->parameter->block_plane)
     {
@@ -1181,6 +1182,8 @@ int delete_w_sub_request(struct ssd_info * ssd, unsigned int channel, struct sub
             ssd->channel_head[channel].subs_w_head=NULL;
             ssd->channel_head[channel].subs_w_tail=NULL;
         }
+
+        ssd->channel_head[sub->location->channel].chip_head[sub->location->chip].ope=0;
     }
     else
     {
@@ -3489,6 +3492,7 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state=CHIP_DATA_TRANSFER;
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=ssd->current_time+ssd->parameter->time_characteristics.tR;
 
+                    ssd->channel_head[location->channel].chip_head[location->chip].ope=2;
                     break;
                 }
             case SR_R_C_A_TRANSFER:
@@ -3544,7 +3548,7 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=sub->next_state_predict_time;
 
                     ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].add_reg_ppn=-1;
-
+                    ssd->channel_head[location->channel].chip_head[location->chip].ope=0;
                     break;
                 }
             case SR_W_TRANSFER:
@@ -3573,6 +3577,7 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state=CHIP_IDLE;										
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=time+ssd->parameter->time_characteristics.tPROG;
 
+                    ssd->channel_head[location->channel].chip_head[location->chip].ope=1;
                     break;
                 }
             default :  return ERROR;
