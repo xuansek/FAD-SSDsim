@@ -619,6 +619,17 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
     if (operation == READ)
     {	
         loc = find_location(ssd,ssd->dram->map->map_entry[lpn].pn);
+        if(ssd->model == 3)
+        {
+            int temp_channel = ssd->chip_token % ssd->parameter->chip_channel[0];
+            int temp_chip = ssd->chip_token / ssd->parameter->channel_number;
+            loc->channel = temp_channel;
+            loc->chip = temp_chip;
+            ssd->chip_token+=1;
+            
+        }
+
+
         sub->location=loc;
         sub->begin_time = ssd->current_time;
         sub->current_state = SR_WAIT;
@@ -627,6 +638,12 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         sub->next_state_predict_time=MAX_INT64;
         sub->lpn = lpn;
         sub->size=size;                                                               /*需要计算出该子请求的请求大小*/
+
+
+        //文件占据多少个chip，计算并行性
+        int x = loc->channel*ssd->parameter->chip_channel[0]+loc->chip;
+        ssd->file_num[req->sub_file_num][x]+=1;
+        ssd->file_num[req->sub_file_num][65]+=1;
 
         p_ch = &ssd->channel_head[loc->channel];	
         sub->ppn = ssd->dram->map->map_entry[lpn].pn;
@@ -933,25 +950,27 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
     struct sub_request * sub=NULL, * p=NULL,*sub1=NULL;
     struct sub_request * sub_twoplane_one=NULL, * sub_twoplane_two=NULL;
     struct sub_request * sub_interleave_one=NULL, * sub_interleave_two=NULL;
+    //printf("20\n");
     for(chip=0;chip<ssd->channel_head[channel].chip;chip++)           			    
     {				       		      
         if((ssd->channel_head[channel].chip_head[chip].current_state==CHIP_WAIT)||((ssd->channel_head[channel].chip_head[chip].next_state==CHIP_DATA_TRANSFER)&&
                     (ssd->channel_head[channel].chip_head[chip].next_state_predict_time<=ssd->current_time)))					       					
         {
             for(die=0;die<ssd->parameter->die_chip;die++)
-            {
+            {   //printf("21\n");
                 sub=find_read_sub_request(ssd,channel,chip,die);                   /*在channel,chip,die中找到读子请求*/
+             //printf("22\n");
                 if(sub!=NULL)
                 {
                     break;
                 }
             }
-
+  //printf("23\n");
             if(sub==NULL)
             {
                 continue;
             }
-
+  //printf("24 %d\n",ssd->parameter->advanced_commands);
             /**************************************************************************************
              *如果ssd支持高级命令，那没我们可以一起处理支持AD_TWOPLANE_READ，AD_INTERLEAVE的读子请求
              *1，有可能产生了two plane操作，在这种情况下，将同一个die上的两个plane的数据依次传出
@@ -959,6 +978,7 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
              ***************************************************************************************/
             if(((ssd->parameter->advanced_commands&AD_TWOPLANE_READ)==AD_TWOPLANE_READ)||((ssd->parameter->advanced_commands&AD_INTERLEAVE)==AD_INTERLEAVE))
             {
+                //printf("29\n");
                 if ((ssd->parameter->advanced_commands&AD_TWOPLANE_READ)==AD_TWOPLANE_READ)     /*有可能产生了two plane操作，在这种情况下，将同一个die上的两个plane的数据依次传出*/
                 {
                     sub_twoplane_one=sub;
@@ -1023,20 +1043,20 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
             }
             else                                                                                 /*如果ssd不支持高级命令那么就执行一个一个的执行读子请求*/
             {
-
-                go_one_step(ssd, sub,NULL, SR_R_DATA_TRANSFER,NORMAL);
+  //printf("25\n");
+                go_one_step(ssd, sub,NULL, SR_R_DATA_TRANSFER,NORMAL); // printf("26\n");
                 *change_current_time_flag=0;  
                 *channel_busy_flag=1;
 
             }
             break;
         }		
-
+  //printf("27\n");
         if(*channel_busy_flag==1)
         {
             break;
         }
-    }		
+    }		  //printf("28\n");
     return SUCCESS;
 }
 
@@ -1568,6 +1588,7 @@ struct ssd_info *process(struct ssd_info *ssd)
             break;
         }
     }
+//printf("10\n");
     if(flag==1)
     {
         ssd->flag=1;                                                                
@@ -1581,10 +1602,10 @@ struct ssd_info *process(struct ssd_info *ssd)
     {
         ssd->flag=0;
     }
-
+//printf("11\n");
     time = ssd->current_time;
     services_2_r_cmd_trans_and_complete(ssd);                                            /*处理当前状态是SR_R_C_A_TRANSFER或者当前状态是SR_COMPLETE，或者下一状态是SR_COMPLETE并且下一状态预计时间小于当前状态时间*/
-
+//printf("12\n");
     random_num=ssd->program_count%ssd->parameter->channel_number;                        /*产生一个随机数，保证每次从不同的channel开始查询*/
 
     /*****************************************
@@ -1609,19 +1630,19 @@ struct ssd_info *process(struct ssd_info *ssd)
                     continue;
                 }
             }
-
+//printf("13\n");
             sub=ssd->channel_head[i].subs_r_head;                                        /*先处理读请求*/
             services_2_r_wait(ssd,i,&flag,&chg_cur_time_flag);                           /*处理处于等待状态的读子请求*/
-
+//printf("14\n");
             if((flag==0)&&(ssd->channel_head[i].subs_r_head!=NULL))                      /*if there are no new read request and data is ready in some dies, send these data to controller and response this request*/		
-            {		     
+            {	//printf("15\n");	     
                 services_2_r_data_trans(ssd,i,&flag,&chg_cur_time_flag);                    
-
+//printf("16\n");
             }
             if(flag==0)                                                                  /*if there are no read request to take channel, we can serve write requests*/ 		
-            {	
+            {	//printf("17\n");
                 services_2_write(ssd,i,&flag,&chg_cur_time_flag);
-
+//printf("18\n");
             }	
         }	
     }

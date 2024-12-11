@@ -41,9 +41,11 @@ int  main()
     memset(ssd,0, sizeof(struct ssd_info));
 
     ssd=initiation(ssd);
-   
+    ssd->model=1;//1 nodedup 2 dedup 3 optimal
     make_aged(ssd);
     pre_process_page(ssd);
+    ssd->chip_token=0;
+   
 
     for (i=0;i<ssd->parameter->channel_number;i++)
     {
@@ -74,6 +76,45 @@ int  main()
 void addprint(struct ssd_info *ssd)
 {
     printf("all:%d read:%d write:%d\n",ssd->co_all,ssd->co_read,ssd->co_write);
+
+    float x=0.0;
+    int two_file_num=0;//只有1个子块或2个子块
+    int temp_file_num=0;
+    float myproch_all =0.0;
+    //计算并行性
+    for(int i = 1; i <=ssd->max_file_num ; i++)
+    {
+        int k=ssd->parameter->channel_number*ssd->parameter->chip_channel[0];
+        float avg = ssd->file_num[i][65] / (k*1.0) ;
+        float myproch = 0.0;
+        for(int j=0;j<k;j++)
+        {    
+            if(ssd->file_num[i][j] >0)
+            {
+                x+=1.0;
+                temp_file_num+=ssd->file_num[i][j];
+            }
+            if( ssd->file_num[i][j] - avg >0)
+            {
+                myproch +=(ssd->file_num[i][j]*1.0) - avg;
+            }
+            else
+            {
+                myproch += avg - (ssd->file_num[i][j]*1.0);
+            }
+            
+            
+        }
+        fprintf(ssd->DOF_avg,"%d %.3f %.3f %.3f\n",i,myproch,myproch/(k*1.0),avg);
+        myproch_all += myproch;
+        if(temp_file_num <=3){
+            two_file_num +=1;
+        }
+        temp_file_num =0;
+    }
+    printf("allfile_chipnum=%.2f ",x);
+    printf("avg %.2f %d\n",x/(ssd->max_file_num*1.0),two_file_num);
+    printf("myproch_all: %.2f avg:%.2f\n",myproch_all,myproch_all/(ssd->max_file_num*1.0));
 }
 
 /******************simulate() *********************************************************************
@@ -108,9 +149,9 @@ struct ssd_info *simulate(struct ssd_info *ssd)
 
     while(flag!=100)      
     {
-
+//printf("1\n");
         flag=get_requests(ssd);
-
+//printf("2 %d\n",flag);
         if(flag == 1)
         {   
             //printf("once\n");
@@ -122,15 +163,19 @@ struct ssd_info *simulate(struct ssd_info *ssd)
             else
             {
                 no_buffer_distribute(ssd);
+                //printf("3\n");
             }		
         }
 
-        process(ssd);    
-        trace_output(ssd);
+        process(ssd); //printf("4\n");   
+        trace_output(ssd);//printf("5\n");
         if(flag == 0 && ssd->request_queue == NULL)
             flag = 100;
-        if(ssd->k ==14290000){
-        //if(ssd->k >=9000000){
+        //if(ssd->k ==14290000){//web nodedup
+        //if(ssd->k >=9000000){//web dedup
+        //if(ssd->k >=12080000){//home dedup
+        //if(ssd->k >=17830000){//home nodedup
+        if(ssd->k >=44060000){//mail nodedup
             flag=100;
         }
     }
@@ -142,7 +187,7 @@ struct ssd_info *simulate(struct ssd_info *ssd)
 
 void add(struct ssd_info *ssd)
 {
-    ssd->k+=1;
+   
     fprintf(ssd->dabiao,"%d\n",ssd->k);
     for(int i=0;i<ssd->parameter->channel_number;i++)
     {
@@ -185,6 +230,7 @@ int get_requests(struct ssd_info *ssd)
     int64_t time_t = 0;
     int64_t nearest_event_time;  
     char md5[50];  
+    int file_num;
 
 #ifdef DEBUG
     printf("enter get_requests,  current time:%lld\n",ssd->current_time);
@@ -195,7 +241,7 @@ int get_requests(struct ssd_info *ssd)
 
     filepoint = ftell(ssd->tracefile);	
     fgets(buffer, 200, ssd->tracefile); 
-    sscanf(buffer,"%lld %d %d %d %d %s",&time_t,&device,&lsn,&size,&ope,md5);
+    sscanf(buffer,"%lld %d %d %d %d %s %d",&time_t,&device,&lsn,&size,&ope,md5,&file_num);
 
     if ((device<0)&&(lsn<0)&&(size<0)&&(ope<0))
     {
@@ -271,7 +317,10 @@ int get_requests(struct ssd_info *ssd)
     request1 = (struct request*)malloc(sizeof(struct request));
     alloc_assert(request1,"request");
     memset(request1,0, sizeof(struct request));
-    add(ssd);
+     ssd->k+=1;
+    if(ope == 1){
+        add(ssd);
+    }
     
 
     request1->time = time_t;
@@ -287,6 +336,11 @@ int get_requests(struct ssd_info *ssd)
     request1->need_distr_flag = NULL;
     request1->complete_lsn_count=0;         //record the count of lsn served by buffer
     filepoint = ftell(ssd->tracefile);		// set the file point
+
+    request1->sub_file_num = file_num;
+    if(file_num > ssd->max_file_num && ope == 1){
+        ssd->max_file_num = file_num;
+    }
 
     if(ssd->request_queue == NULL)          //The queue is empty
     {

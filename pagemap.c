@@ -160,6 +160,15 @@ int set_entry_state(struct ssd_info *ssd,unsigned int lsn,unsigned int size)
     return state;
 }
 
+int add_dedup_read(struct ssd_info *ssd,const char *str,struct HashTable *table)
+{
+    // 初始化哈希表
+    // 添加字符串
+    int flag = addString(table, str);
+
+    return flag;
+}
+
 /**************************************************
  *读请求预处理函数，当读请求所读得页里面没有数据时，
  *需要预处理网该页里面写数据，以保证能读到数据
@@ -176,6 +185,12 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
     char md5[50];
     struct local *location;
     int64_t time;
+    int file_num;
+    HashTable *table;
+    if(ssd->model == 2 || ssd->model ==3){
+        table = initHashTable(3200000); // 初始化哈希表,大小根据读请求文件总数而定
+    }
+    
 
     printf("\n");
     printf("begin pre_process_page.................\n");
@@ -194,7 +209,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
 
     while(fgets(buffer_request,200,ssd->tracefile))
     {
-        sscanf(buffer_request,"%lld %d %d %d %d %s",&time,&device,&lsn,&size,&ope,md5);
+        sscanf(buffer_request,"%lld %d %d %d %d %s %d",&time,&device,&lsn,&size,&ope,md5,&file_num);
         fl++;
         trace_assert(time,device,lsn,size,ope);                         /*断言，当读到的time，device，lsn，size，ope不合法时就会处理*/
 
@@ -224,6 +239,17 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                  *B，这个状态>0，表示，以前有写过，这需要进一步比较状态，因为新写的状态可以与以前的状态有重叠的扇区的地方
                  ********************************************************************************************************/
                 lpn=lsn/ssd->parameter->subpage_page;
+                
+                if(ssd->model ==2 || ssd->model ==3){
+                    int flag = add_dedup_read(ssd,md5,table);
+                    if (flag == 1){
+                        lsn=lsn+sub_size;
+                        add_size+=sub_size; 
+                        continue ;
+                    }
+                }
+               
+               
                 if(ssd->dram->map->map_entry[lpn].state==0)                 /*状态为0的情况*/
                 {
                    
@@ -250,6 +276,7 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
                 }//if(ssd->dram->map->map_entry[lpn].state==0)
                 else if(ssd->dram->map->map_entry[lpn].state>0)           /*状态不为0的情况*/
                 {   
+                    
                     map_entry_new=set_entry_state(ssd,lsn,sub_size);      /*得到新的状态，并与原来的状态相或的到一个状态*/
                     map_entry_old=ssd->dram->map->map_entry[lpn].state;
                     modify=map_entry_new|map_entry_old;
@@ -272,6 +299,10 @@ struct ssd_info *pre_process_page(struct ssd_info *ssd)
         }//if(ope==1) 
     }	
 
+    if(ssd->model == 2 || ssd->model == 3){
+        freeHashTable(table);  // 释放内存
+    }
+    
     printf("\n");
     printf("pre_process is complete!\n");
 
@@ -1007,6 +1038,7 @@ int uninterrupt_gc(struct ssd_info *ssd,unsigned int channel,unsigned int chip,u
         return ERROR;
     }
     active_block=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].active_block;
+    //active_block是要将有效页写入的块，而不是要擦除的块
 
     invalid_page=0;
     transfer_size=0;
@@ -1037,7 +1069,7 @@ int uninterrupt_gc(struct ssd_info *ssd,unsigned int channel,unsigned int chip,u
         {
             free_page++;
         }
-        if(free_page!=0)
+        if(free_page >= ssd->parameter->block_plane /2)
         {
             printf("\ntoo much free page. \t %d\t .%d\t%d\t%d\t%d\t\n",free_page,channel,chip,die,plane);
         }

@@ -203,8 +203,13 @@ struct ssd_info{
     FILE * statisticfile;
     FILE * statisticfile2;
     FILE * dabiao;
+    FILE * DOF_avg;
     int k;
     int co_read,co_write,co_all;//每次计算并行性的时候，read占据多少个chip，write多少个chip；co_read是所有的总次数
+    int file_num[954026][66];
+    int max_file_num;
+    int model;
+    int chip_token;
 
     struct parameter_value *parameter;   //SSD参数因子
     struct dram_info *dram;
@@ -370,6 +375,8 @@ struct request{
 
     struct sub_request *subs;          //链接到属于该请求的所有子请求
     struct request *next_node;         //指向下一个请求结构体
+
+    int sub_file_num;
 };
 
 
@@ -393,6 +400,7 @@ struct sub_request{
     struct sub_request *next_subs;    //指向属于同一个request的子请求
     struct sub_request *next_node;    //指向同一个channel中下一个子请求结构体
     struct sub_request *update;       //因为在写操作中存在更新操作，因为在动态分配方式中无法使用copyback操作，需要将原来的页读出后才能进行写操作，所以，将因更新产生的读操作挂在这个指针上
+
 };
 
 

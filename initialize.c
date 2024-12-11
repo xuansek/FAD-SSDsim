@@ -146,6 +146,13 @@ struct ssd_info *initiation(struct ssd_info *ssd)
         return NULL;
     }
 
+    ssd->DOF_avg=fopen("DOF_avg.txt","w");
+    if(ssd->DOF_avg==NULL)
+    {
+        printf("the DOF_avg file can't open\n");
+        return NULL;
+    }
+
     fprintf(ssd->outputfile,"parameter file: %s\n",ssd->parameterfilename); 
     fprintf(ssd->outputfile,"trace file: %s\n",ssd->tracefilename);
     fprintf(ssd->statisticfile,"parameter file: %s\n",ssd->parameterfilename); 
