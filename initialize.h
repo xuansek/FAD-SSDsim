@@ -210,6 +210,7 @@ struct ssd_info{
     int max_file_num;
     int model;
     int chip_token;
+    int mail_flag;
 
     struct parameter_value *parameter;   //SSD参数因子
     struct dram_info *dram;

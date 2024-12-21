@@ -41,7 +41,9 @@ int  main()
     memset(ssd,0, sizeof(struct ssd_info));
 
     ssd=initiation(ssd);
-    ssd->model=1;//1 nodedup 2 dedup 3 optimal
+    ssd->model=2;//1 nodedup 2 dedup 3 optimal
+    ssd->mail_flag=1;//mail 设置障碍
+
     make_aged(ssd);
     pre_process_page(ssd);
     ssd->chip_token=0;
@@ -175,7 +177,8 @@ struct ssd_info *simulate(struct ssd_info *ssd)
         //if(ssd->k >=9000000){//web dedup
         //if(ssd->k >=12080000){//home dedup
         //if(ssd->k >=17830000){//home nodedup
-        if(ssd->k >=44060000){//mail nodedup
+        //if(ssd->k >=20680000){//mail4 nodedup
+        if(ssd->k >=4305000){//mail4 dedup
             flag=100;
         }
     }
@@ -323,7 +326,8 @@ int get_requests(struct ssd_info *ssd)
     }
     
 
-    request1->time = time_t;
+    //request1->time = time_t;
+    request1->time = ssd->current_time;
     request1->lsn = lsn;
     request1->size = size;
     request1->operation = ope;	

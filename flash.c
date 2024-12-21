@@ -625,7 +625,7 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
             int temp_chip = ssd->chip_token / ssd->parameter->channel_number;
             loc->channel = temp_channel;
             loc->chip = temp_chip;
-            ssd->chip_token+=1;
+            ssd->chip_token = (ssd->chip_token+1)%ssd->parameter->chip_num;
             
         }
 
@@ -638,7 +638,7 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         sub->next_state_predict_time=MAX_INT64;
         sub->lpn = lpn;
         sub->size=size;                                                               /*需要计算出该子请求的请求大小*/
-
+        req->time = ssd->current_time;
 
         //文件占据多少个chip，计算并行性
         int x = loc->channel*ssd->parameter->chip_channel[0]+loc->chip;
@@ -699,6 +699,7 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         sub->size=size;
         sub->state=state;
         sub->begin_time=ssd->current_time;
+        req->time = ssd->current_time;
 
         if (allocate_location(ssd ,sub)==ERROR)
         {
@@ -959,7 +960,7 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
             for(die=0;die<ssd->parameter->die_chip;die++)
             {   //printf("21\n");
                 sub=find_read_sub_request(ssd,channel,chip,die);                   /*在channel,chip,die中找到读子请求*/
-             //printf("22\n");
+            // printf("22\n");
                 if(sub!=NULL)
                 {
                     break;
@@ -978,7 +979,7 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
              ***************************************************************************************/
             if(((ssd->parameter->advanced_commands&AD_TWOPLANE_READ)==AD_TWOPLANE_READ)||((ssd->parameter->advanced_commands&AD_INTERLEAVE)==AD_INTERLEAVE))
             {
-                //printf("29\n");
+               // printf("28\n");
                 if ((ssd->parameter->advanced_commands&AD_TWOPLANE_READ)==AD_TWOPLANE_READ)     /*有可能产生了two plane操作，在这种情况下，将同一个die上的两个plane的数据依次传出*/
                 {
                     sub_twoplane_one=sub;
@@ -1043,8 +1044,8 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
             }
             else                                                                                 /*如果ssd不支持高级命令那么就执行一个一个的执行读子请求*/
             {
-  //printf("25\n");
-                go_one_step(ssd, sub,NULL, SR_R_DATA_TRANSFER,NORMAL); // printf("26\n");
+ // printf("25\n");
+                go_one_step(ssd, sub,NULL, SR_R_DATA_TRANSFER,NORMAL);  //printf("26\n");
                 *change_current_time_flag=0;  
                 *channel_busy_flag=1;
 
@@ -1056,7 +1057,7 @@ Status services_2_r_data_trans(struct ssd_info * ssd,unsigned int channel,unsign
         {
             break;
         }
-    }		  //printf("28\n");
+    }		  
     return SUCCESS;
 }
 
@@ -3547,6 +3548,7 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                 }
             case SR_R_DATA_TRANSFER:
                 {   
+                    //printf("30\n");
                     /**************************************************************************************************************
                      *目标状态是数据传输时，sub的下一个状态就是完成状态SR_COMPLETE
                      *这个状态的处理也与channel，chip有关，所以channel，chip的当前状态变为CHANNEL_DATA_TRANSFER，CHIP_DATA_TRANSFER
@@ -3557,19 +3559,23 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
                     sub->next_state=SR_COMPLETE;				
                     sub->next_state_predict_time=ssd->current_time+(sub->size*ssd->parameter->subpage_capacity)*ssd->parameter->time_characteristics.tRC;			
                     sub->complete_time=sub->next_state_predict_time;
-
+//printf("31\n");
                     ssd->channel_head[location->channel].current_state=CHANNEL_DATA_TRANSFER;		
                     ssd->channel_head[location->channel].current_time=ssd->current_time;		
                     ssd->channel_head[location->channel].next_state=CHANNEL_IDLE;	
                     ssd->channel_head[location->channel].next_state_predict_time=sub->next_state_predict_time;
-
+//printf("32\n");
                     ssd->channel_head[location->channel].chip_head[location->chip].current_state=CHIP_DATA_TRANSFER;				
                     ssd->channel_head[location->channel].chip_head[location->chip].current_time=ssd->current_time;			
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state=CHIP_IDLE;			
                     ssd->channel_head[location->channel].chip_head[location->chip].next_state_predict_time=sub->next_state_predict_time;
-
+//printf("33\n");
+//printf("%d %d %d %d\n",location->channel,location->chip,location->die,location->plane);
+//printf("ppn :%d\n",ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].add_reg_ppn);
                     ssd->channel_head[location->channel].chip_head[location->chip].die_head[location->die].plane_head[location->plane].add_reg_ppn=-1;
+//printf("34\n");
                     ssd->channel_head[location->channel].chip_head[location->chip].ope=0;
+//printf("35\n");
                     break;
                 }
             case SR_W_TRANSFER:
@@ -3769,7 +3775,7 @@ Status go_one_step(struct ssd_info * ssd, struct sub_request * sub1,struct sub_r
         printf("\nERROR: Unexpected command !\n" );
         return ERROR;
     }
-
+//printf("36\n");
     return SUCCESS;
 }
 

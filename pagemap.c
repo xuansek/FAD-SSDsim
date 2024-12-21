@@ -347,7 +347,12 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
             channel=ssd->token;
             ssd->token=(ssd->token+1)%ssd->parameter->channel_number;
             chip=ssd->channel_head[channel].token;
-            ssd->channel_head[channel].token=(chip+1)%ssd->parameter->chip_channel[0];
+            if(ssd->mail_flag == 1){
+                ssd->channel_head[channel].token=(chip+1)%(ssd->parameter->chip_channel[0]-3);
+            }else{
+                ssd->channel_head[channel].token=(chip+1)%ssd->parameter->chip_channel[0];
+            }
+            
             die=ssd->channel_head[channel].chip_head[chip].token;
             ssd->channel_head[channel].chip_head[chip].token=(die+1)%ssd->parameter->die_chip;
             plane=ssd->channel_head[channel].chip_head[chip].die_head[die].token;
