@@ -203,6 +203,34 @@ Status allocate_location(struct ssd_info * ssd ,struct sub_request *sub_req)
 
                     break;
                 }
+            case 6:
+                {
+                
+                    /*if(ssd->dram->map->map_entry[sub_req->lpn].state!=0)
+                    {  
+                        struct local *location;
+                        int temp_ppn=ssd->dram->map->map_entry[sub_req->lpn].pn;
+                        location=find_location(ssd,temp_ppn);
+                        sub_req->location->channel = location->channel;
+                        sub_req->location->chip = location->chip;
+                        free(location);
+                    }
+                    else
+                    {
+                        sub_req->location->channel = ssd->ssd_token % channel_num;
+                        sub_req->location->chip = ssd->ssd_token / channel_num;
+                        ssd->ssd_token = (ssd->ssd_token +1)%(channel_num * chip_num);
+                    }*/
+                    sub_req->location->channel = ssd->ssd_token % channel_num;
+                        sub_req->location->chip = ssd->ssd_token / channel_num;
+                        ssd->ssd_token = (ssd->ssd_token +1)%(channel_num * chip_num);
+                    sub_req->location->die=ssd->channel_head[sub_req->location->channel].chip_head[sub_req->location->chip].token;
+                    ssd->channel_head[sub_req->location->channel].chip_head[sub_req->location->chip].token=(sub_req->location->die+1)%ssd->parameter->die_chip;
+                    sub_req->location->plane=ssd->channel_head[sub_req->location->channel].chip_head[sub_req->location->chip].die_head[sub_req->location->die].token;
+                    ssd->channel_head[sub_req->location->channel].chip_head[sub_req->location->chip].die_head[sub_req->location->die].token=(sub_req->location->plane+1)%ssd->parameter->plane_die;
+
+                    break;
+                }
             default : return ERROR;
 
         }
@@ -259,6 +287,7 @@ Status allocate_location(struct ssd_info * ssd ,struct sub_request *sub_req)
 
         }
     }
+    
     if ((ssd->parameter->allocation_scheme!=0)||(ssd->parameter->dynamic_allocation!=0))
     {
         if (ssd->channel_head[sub_req->location->channel].subs_w_tail!=NULL)
@@ -621,11 +650,11 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         loc = find_location(ssd,ssd->dram->map->map_entry[lpn].pn);
         if(ssd->model == 3)
         {
-            int temp_channel = ssd->chip_token % ssd->parameter->chip_channel[0];
+            int temp_channel = ssd->chip_token % ssd->parameter->channel_number;
             int temp_chip = ssd->chip_token / ssd->parameter->channel_number;
             loc->channel = temp_channel;
             loc->chip = temp_chip;
-            ssd->chip_token = (ssd->chip_token+1)%ssd->parameter->chip_num;
+            ssd->chip_token = (ssd->chip_token+1)%(ssd->parameter->chip_num);
             
         }
 
@@ -641,17 +670,29 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         req->time = ssd->current_time;
 
         //文件占据多少个chip，计算并行性
-        int x = loc->channel*ssd->parameter->chip_channel[0]+loc->chip;
+        int x = loc->chip*ssd->parameter->channel_number+loc->channel;
         ssd->file_num[req->sub_file_num][x]+=1;
         ssd->file_num[req->sub_file_num][65]+=1;
 
-        p_ch = &ssd->channel_head[loc->channel];	
-        sub->ppn = ssd->dram->map->map_entry[lpn].pn;
+        p_ch = &ssd->channel_head[loc->channel];
+        sub->ppn = ssd->my_ppn;
+        ssd->my_ppn+=1;	
+        /*if(ssd->model==3){
+            sub->ppn = ssd->my_ppn;
+            ssd->my_ppn+=1;
+        }
+        else
+        {
+            sub->ppn = ssd->dram->map->map_entry[lpn].pn;
+        }*/
+        if(req->sub_file_num==1){
+            printf("%d %d\n",loc->channel,loc->chip);
+        }
         sub->operation = READ;
         sub->state=(ssd->dram->map->map_entry[lpn].state&0x7fffffff);
         sub_r=p_ch->subs_r_head;                                                      /*一下几行包括flag用于判断该读子请求队列中是否有与这个子请求相同的，有的话，将新的子请求直接赋为完成*/
         flag=0;
-        while (sub_r!=NULL)
+        /*while (sub_r!=NULL)
         {
             if (sub_r->ppn==sub->ppn)
             {
@@ -659,7 +700,7 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
                 break;
             }
             sub_r=sub_r->next_node;
-        }
+        }*/
         if (flag==0)
         {
             if (p_ch->subs_r_tail!=NULL)
@@ -686,7 +727,8 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
      *写请求的情况下，就需要利用到函数allocate_location(ssd ,sub)来处理静态分配和动态分配了
      **************************************************************************************/
     else if(operation == WRITE)
-    {                                
+    {    
+                                   
         sub->ppn=0;
         sub->operation = WRITE;
         sub->location=(struct local *)malloc(sizeof(struct local));
@@ -700,7 +742,7 @@ struct sub_request * creat_sub_request(struct ssd_info * ssd,unsigned int lpn,in
         sub->state=state;
         sub->begin_time=ssd->current_time;
         req->time = ssd->current_time;
-
+ 
         if (allocate_location(ssd ,sub)==ERROR)
         {
             free(sub->location);

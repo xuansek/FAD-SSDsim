@@ -153,6 +153,27 @@ struct ssd_info *initiation(struct ssd_info *ssd)
         return NULL;
     }
 
+    ssd->read_time=fopen("read_time.txt","w");
+    if(ssd->read_time==NULL)
+    {
+        printf("the read_time file can't open\n");
+        return NULL;
+    }
+
+    ssd->write_time=fopen("write_time.txt","w");
+    if(ssd->write_time==NULL)
+    {
+        printf("the write_time file can't open\n");
+        return NULL;
+    }
+
+    ssd->DOF_avg2=fopen("DOF_avg2.txt","w");
+    if(ssd->DOF_avg2==NULL)
+    {
+        printf("the DOF_avg2 file can't open\n");
+        return NULL;
+    }
+
     fprintf(ssd->outputfile,"parameter file: %s\n",ssd->parameterfilename); 
     fprintf(ssd->outputfile,"trace file: %s\n",ssd->tracefilename);
     fprintf(ssd->statisticfile,"parameter file: %s\n",ssd->parameterfilename); 
@@ -567,6 +588,10 @@ struct parameter_value *load_parameters(char parameter_file[30])
             sscanf(buf + next_eql,"%d",&p->aged); 
         }else if((res_eql=strcmp(buf,"aged ratio")) ==0){
             sscanf(buf + next_eql,"%f",&p->aged_ratio); 
+        }else if((res_eql=strcmp(buf,"model")) ==0){
+            sscanf(buf + next_eql,"%d",&p->model); 
+        }else if((res_eql=strcmp(buf,"k")) ==0){
+            sscanf(buf + next_eql,"%d",&p->k); 
         }else if((res_eql=strcmp(buf,"queue_length")) ==0){
             sscanf(buf + next_eql,"%d",&p->queue_length); 
         }else if((res_eql=strncmp(buf,"chip number",11)) ==0)

@@ -204,6 +204,11 @@ struct ssd_info{
     FILE * statisticfile2;
     FILE * dabiao;
     FILE * DOF_avg;
+    FILE * DOF_avg2;
+    FILE * read_time;
+    FILE * read_time2;
+    FILE * write_time;
+    FILE * write_time2;
     int k;
     int co_read,co_write,co_all;//每次计算并行性的时候，read占据多少个chip，write多少个chip；co_read是所有的总次数
     int file_num[954026][66];
@@ -211,6 +216,10 @@ struct ssd_info{
     int model;
     int chip_token;
     int mail_flag;
+    int ssd_token;
+    int kill;
+    int my_ppn;
+    int frag_num;
 
     struct parameter_value *parameter;   //SSD参数因子
     struct dram_info *dram;
@@ -361,7 +370,7 @@ struct controller_info{
 
 struct request{
     int64_t time;                      //请求到达的时间，单位为us,这里和通常的习惯不一样，通常的是ms为单位，这里需要有个单位变换过程
-    unsigned int lsn;                  //请求的起始地址，逻辑地址
+    int64_t lsn;                  //请求的起始地址，逻辑地址
     unsigned int size;                 //请求的大小，既多少个扇区
     unsigned int operation;            //请求的种类，1为读，0为写
 
@@ -378,12 +387,22 @@ struct request{
     struct request *next_node;         //指向下一个请求结构体
 
     int sub_file_num;
+    struct last_request *last_subs;        // 输入文件中子请求链表
 };
 
+struct last_request {
+    int64_t time;                    // 子请求的到达时间
+    int64_t lsn;                // 子请求的逻辑扇区号（LSN）
+    int size;               // 子请求的大小（单位：扇区数）
+    int operation;          // 子请求的操作类型（读/写，1为读，0为写）
+    //char md5[50];                    // 文件的MD5指纹值
+    int file_num;                    // 文件编号
+    struct last_request *next_node;   // 指向下一个子请求的指针（链表）
+};
 
 struct sub_request{
-    unsigned int lpn;                  //这里表示该子请求的逻辑页号
-    unsigned int ppn;                  //分配那个物理子页给这个子请求。在multi_chip_page_mapping中，产生子页请求时可能就知道psn的值，其他时候psn的值由page_map_read,page_map_write等FTL最底层函数产生。 
+    int64_t lpn;                  //这里表示该子请求的逻辑页号
+    int64_t ppn;                  //分配那个物理子页给这个子请求。在multi_chip_page_mapping中，产生子页请求时可能就知道psn的值，其他时候psn的值由page_map_read,page_map_write等FTL最底层函数产生。 
     unsigned int operation;            //表示该子请求的类型，除了读1 写0，还有擦除，two plane等操作 
     int size;
 
@@ -475,6 +494,8 @@ struct parameter_value{
     int aged;                       //1表示需要将这个SSD变成aged，0表示需要将这个SSD保持non-aged
     float aged_ratio; 
     int queue_length;               //请求队列的长度限制
+    int model;
+    int k;
 
     struct ac_time_characteristics time_characteristics;
 };

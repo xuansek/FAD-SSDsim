@@ -21,6 +21,7 @@ Hao Luo         2011/01/01        2.0           Change               luohao13568
 #include <sys/types.h>
 #include "initialize.h"
 #include "hash_table.h"
+#include <stdlib.h>
 
 #define MAX_INT64  0x7fffffffffffffffll
 

@@ -41,8 +41,12 @@ int  main()
     memset(ssd,0, sizeof(struct ssd_info));
 
     ssd=initiation(ssd);
-    ssd->model=2;//1 nodedup 2 dedup 3 optimal
-    ssd->mail_flag=1;//mail 设置障碍
+    ssd->model=ssd->parameter->model;//1 nodedup 2 dedup 3 optimal
+    printf("%d %d\n",ssd->model,ssd->parameter->k);
+    ssd->mail_flag=0;//mail 设置障碍
+    ssd->ssd_token=0;
+    ssd->kill=0;
+    ssd->my_ppn=0;
 
     make_aged(ssd);
     pre_process_page(ssd);
@@ -66,7 +70,8 @@ int  main()
     statistic_output(ssd);  
     /*	free_all_node(ssd);*/
 
-    addprint(ssd);
+    //addprint(ssd);//DOF计算方法1
+    addDOF(ssd);//DOF计算方法2
 
     printf("\n");
     printf("the simulation is completed!\n");
@@ -75,48 +80,112 @@ int  main()
     /* 	_CrtDumpMemoryLeaks(); */
 }
 
+void addDOF(struct ssd_info *ssd)
+{
+    float allDOF=0.0,allDOF2=0.0,x=0.0;
+    int filenum=0;
+    for(int i=1;i<=ssd->max_file_num;i++)
+    {
+        int k=ssd->parameter->channel_number*ssd->parameter->chip_channel[0];
+        int ma=0;
+        for(int j=0;j<k;j++)
+        {
+            if(ssd->file_num[i][j] >ma)
+            {
+                ma=ssd->file_num[i][j];
+            }
+           
+        }
+        
+        float DOF=ssd->file_num[i][65]/(ma*1.0);
+        if(ssd->file_num[i][65]>k){
+            DOF=DOF/(k*1.0);
+        }else{
+            DOF=DOF/(ssd->file_num[i][65]*1.0);
+        }
+        
+        
+        if(ssd->file_num[i][65]>1)
+        {
+            filenum+=1;
+            allDOF2+=(1.0-DOF);
+            fprintf(ssd->DOF_avg2,"%d %.2f\n",i,1.0-DOF);
+
+            //假的
+            float temp=ssd->file_num[i][65]/(k*1.0);
+           
+            float temp2=ssd->file_num[i][65]/(temp*1.0*k);
+            x+=temp2;
+            //fprintf(ssd->DOF_avg2,"!!!%d %.2f\n",i,temp2);
+        }
+        allDOF+=(1.0-DOF);
+        fprintf(ssd->DOF_avg,"%d %.2f\n",i,(1.0-DOF));
+        if((1.0-DOF)>0){
+            ssd->frag_num+=1;
+        }
+        
+
+    }
+    allDOF=allDOF/(ssd->max_file_num*1.0);
+    allDOF2=allDOF2/(filenum*1.0);
+    x=x/(filenum*1.0);
+    printf("%.2f %.2f %.2f %d\n",allDOF,allDOF2,x,filenum);
+}
+
 void addprint(struct ssd_info *ssd)
 {
     printf("all:%d read:%d write:%d\n",ssd->co_all,ssd->co_read,ssd->co_write);
 
     float x=0.0;
-    int two_file_num=0;//只有1个子块或2个子块
+    int one_file_num=0,two_file_num=0,three_file_num=0;//只有1个子块或2个子块
     int temp_file_num=0;
     float myproch_all =0.0;
+    int myproch_filenum=0;
     //计算并行性
     for(int i = 1; i <=ssd->max_file_num ; i++)
     {
+        if(ssd->file_num[i][65]<=1){
+            one_file_num+=1;
+            continue;
+        }
         int k=ssd->parameter->channel_number*ssd->parameter->chip_channel[0];
+        int flag=0;
         float avg = ssd->file_num[i][65] / (k*1.0) ;
+        if( k > ssd->file_num[i][65] )
+        {
+            avg=1.0;
+            flag = 1;
+        }
         float myproch = 0.0;
+
+        myproch_filenum+=1;
         for(int j=0;j<k;j++)
         {    
             if(ssd->file_num[i][j] >0)
             {
                 x+=1.0;
-                temp_file_num+=ssd->file_num[i][j];
             }
+
             if( ssd->file_num[i][j] - avg >0)
             {
                 myproch +=(ssd->file_num[i][j]*1.0) - avg;
             }
-            else
-            {
-                myproch += avg - (ssd->file_num[i][j]*1.0);
-            }
             
             
         }
+        myproch = myproch;
         fprintf(ssd->DOF_avg,"%d %.3f %.3f %.3f\n",i,myproch,myproch/(k*1.0),avg);
         myproch_all += myproch;
-        if(temp_file_num <=3){
+        if(ssd->file_num[i][65] ==2 ){
             two_file_num +=1;
         }
-        temp_file_num =0;
+        if(ssd->file_num[i][65] >2){
+            three_file_num+=1;
+        }
     }
-    printf("allfile_chipnum=%.2f ",x);
-    printf("avg %.2f %d\n",x/(ssd->max_file_num*1.0),two_file_num);
-    printf("myproch_all: %.2f avg:%.2f\n",myproch_all,myproch_all/(ssd->max_file_num*1.0));
+    printf("allfile_chipnum=%.2f \n",x);
+    printf("%d %d %d\n",one_file_num,two_file_num,three_file_num);
+    printf("myproch_all: %.2f avg:%.2f\n",myproch_all,myproch_all/(myproch_filenum*1.0));
 }
 
 /******************simulate() *********************************************************************
@@ -173,12 +242,15 @@ struct ssd_info *simulate(struct ssd_info *ssd)
         trace_output(ssd);//printf("5\n");
         if(flag == 0 && ssd->request_queue == NULL)
             flag = 100;
-        //if(ssd->k ==14290000){//web nodedup
-        //if(ssd->k >=9000000){//web dedup
+        //if(ssd->k >=14290000){//web nodedup
+        if(ssd->k >=ssd->parameter->k){//web dedup
         //if(ssd->k >=12080000){//home dedup
         //if(ssd->k >=17830000){//home nodedup
         //if(ssd->k >=20680000){//mail4 nodedup
-        if(ssd->k >=4305000){//mail4 dedup
+        //if(ssd->k >=4305000){//mail4 dedup
+            flag=100;
+        }
+        if(ssd->kill>=10000){
             flag=100;
         }
     }
@@ -320,17 +392,18 @@ int get_requests(struct ssd_info *ssd)
     request1 = (struct request*)malloc(sizeof(struct request));
     alloc_assert(request1,"request");
     memset(request1,0, sizeof(struct request));
-     ssd->k+=1;
-    if(ope == 1){
-        add(ssd);
-    }
     
+    
+    //add(ssd);
+    fprintf(ssd->dabiao,"%d\n",ssd->k);
+    
+    struct last_request *last_request1 , *tail;  
 
-    //request1->time = time_t;
-    request1->time = ssd->current_time;
     request1->lsn = lsn;
     request1->size = size;
-    request1->operation = ope;	
+    request1->operation = ope;
+    //request1->time = time_t;
+    request1->time = ssd->current_time;
     request1->begin_time = time_t;
     request1->response_time = 0;	
     request1->energy_consumption = 0;	
@@ -338,15 +411,70 @@ int get_requests(struct ssd_info *ssd)
     request1->distri_flag = 0;              // indicate whether this request has been distributed already
     request1->subs = NULL;
     request1->need_distr_flag = NULL;
-    request1->complete_lsn_count=0;         //record the count of lsn served by buffer
+    request1->complete_lsn_count=0;         //record the count of lsn served by buffer	
+    request1->sub_file_num = file_num;
+    request1->last_subs = NULL;
+
+    // 遍历当前文件的所有请求，直到遇到下一个文件
+    while (1) {
+        last_request1 = (struct last_request*)malloc(sizeof(struct last_request));
+        alloc_assert(last_request1, "last_request");
+        memset(last_request1, 0, sizeof(struct last_request));
+        ssd->k+=1;
+        last_request1->time = time_t;
+        last_request1->lsn = lsn;
+        last_request1->size = size;
+        last_request1->operation = ope;
+        //last_request1->md5 = strcopy(md5);  // 复制MD5指纹
+        last_request1->next_node = NULL;
+    
+        // 如果队列为空，初始化队列头和尾
+        if (request1->last_subs == NULL) {
+            request1->last_subs = last_request1;  // 队列头
+            tail = last_request1;  // 队列尾
+        } else {
+            tail->next_node = last_request1;  // 队列尾加入新的子请求
+            tail = last_request1;  // 更新队列尾指针
+        }
+        if(ope == 1){
+            ssd->ave_read_size+=1;
+        }
+        if(ope==0){
+            ssd->ave_write_size+=1;
+        }
+
+        // 读取下一行请求
+        filepoint = ftell(ssd->tracefile);  
+        fgets(buffer, 200, ssd->tracefile);
+        sscanf(buffer, "%lld %d %d %d %d %s %d", &time_t, &device, &lsn, &size, &ope, md5, &file_num);
+        lsn = lsn%large_lsn;
+
+        // 判断文件号是否相同，如果不同，说明是下一个文件的请求
+        if (file_num != request1->sub_file_num) {
+            // 将当前文件的请求加入队列
+            if (ssd->request_queue == NULL) {  // 如果队列为空
+                ssd->request_queue = request1;
+                ssd->request_tail = request1;
+                ssd->request_queue_length++;
+            } else {  // 否则，加入队列尾部
+                ssd->request_tail->next_node = request1;
+                ssd->request_tail = request1;
+                ssd->request_queue_length++;
+            }
+            // 回滚文件指针到上一行起始位置
+            fseek(ssd->tracefile, filepoint, SEEK_SET);
+            // 读取完一个文件的所有请求后，跳出循环
+            break;
+        }
+    }
+    
     filepoint = ftell(ssd->tracefile);		// set the file point
 
-    request1->sub_file_num = file_num;
     if(file_num > ssd->max_file_num && ope == 1){
         ssd->max_file_num = file_num;
     }
 
-    if(ssd->request_queue == NULL)          //The queue is empty
+    /*if(ssd->request_queue == NULL)          //The queue is empty
     {
         ssd->request_queue = request1;
         ssd->request_tail = request1;
@@ -357,16 +485,16 @@ int get_requests(struct ssd_info *ssd)
         (ssd->request_tail)->next_node = request1;	
         ssd->request_tail = request1;			
         ssd->request_queue_length++;
-    }
+    }*/
 
-    if (request1->operation==1)             //计算平均请求大小 1为读 0为写
+    /*if (request1->operation==1)             //计算平均请求大小 1为读 0为写
     {
         ssd->ave_read_size=(ssd->ave_read_size*ssd->read_request_count+request1->size)/(ssd->read_request_count+1);
     } 
     else
     {
         ssd->ave_write_size=(ssd->ave_write_size*ssd->write_request_count+request1->size)/(ssd->write_request_count+1);
-    }
+    }*/
 
 
     filepoint = ftell(ssd->tracefile);	
@@ -759,11 +887,25 @@ void trace_output(struct ssd_info* ssd){
                 {
                     ssd->read_request_count++;
                     ssd->read_avg=ssd->read_avg+(end_time-req->time);
+                    fprintf(ssd->read_time,"%d %lld\n",req->sub_file_num,end_time-req->time);
+                    int ma=0;
+                    for(int j=0;j<ssd->parameter->chip_num;j++)
+                    {
+                        if(ssd->file_num[req->sub_file_num][j]>ma){
+                            ma=ssd->file_num[req->sub_file_num][j];
+                        }
+                    }
+                    int temp=ssd->file_num[req->sub_file_num][65]/(ssd->parameter->chip_num);
+                    if(ssd->file_num[req->sub_file_num][65]%ssd->parameter->chip_num!=0){
+                        temp+=1;
+                    }
+                    
                 } 
                 else
                 {
                     ssd->write_request_count++;
                     ssd->write_avg=ssd->write_avg+(end_time-req->time);
+                    fprintf(ssd->write_time,"%d %lld\n",req->sub_file_num,end_time-req->time);
                 }
 
                 while(req->subs!=NULL)
@@ -902,10 +1044,10 @@ void statistic_output(struct ssd_info *ssd)
     fprintf(ssd->outputfile,"interleave multiple plane erase count: %13d\n",ssd->interleave_mplane_erase_count);
     fprintf(ssd->outputfile,"read request count: %13d\n",ssd->read_request_count);
     fprintf(ssd->outputfile,"write request count: %13d\n",ssd->write_request_count);
-    fprintf(ssd->outputfile,"read request average size: %13f\n",ssd->ave_read_size);
-    fprintf(ssd->outputfile,"write request average size: %13f\n",ssd->ave_write_size);
-    fprintf(ssd->outputfile,"read request average response time: %lld\n",ssd->read_avg/ssd->read_request_count);
-    fprintf(ssd->outputfile,"write request average response time: %lld\n",ssd->write_avg/ssd->write_request_count);
+    fprintf(ssd->outputfile,"read request average size: %13f\n",ssd->ave_read_size*4/ssd->read_request_count);
+    fprintf(ssd->outputfile,"write request average size: %13f\n",ssd->ave_write_size*4/ssd->write_request_count);
+    fprintf(ssd->outputfile,"read request average response time(kB): %lld\n",ssd->read_avg/ssd->read_request_count);
+    fprintf(ssd->outputfile,"write request average response time(kB): %lld\n",ssd->write_avg/ssd->write_request_count);
     fprintf(ssd->outputfile,"buffer read hits: %13d\n",ssd->dram->buffer->read_hit);
     fprintf(ssd->outputfile,"buffer read miss: %13d\n",ssd->dram->buffer->read_miss_hit);
     fprintf(ssd->outputfile,"buffer write hits: %13d\n",ssd->dram->buffer->write_hit);
@@ -942,8 +1084,8 @@ void statistic_output(struct ssd_info *ssd)
     fprintf(ssd->statisticfile,"interleave multiple plane erase count: %13d\n",ssd->interleave_mplane_erase_count);
     fprintf(ssd->statisticfile,"read request count: %13d\n",ssd->read_request_count);
     fprintf(ssd->statisticfile,"write request count: %13d\n",ssd->write_request_count);
-    fprintf(ssd->statisticfile,"read request average size: %13f\n",ssd->ave_read_size);
-    fprintf(ssd->statisticfile,"write request average size: %13f\n",ssd->ave_write_size);
+    fprintf(ssd->statisticfile,"read request average size: %13f\n",ssd->ave_read_size*4/ssd->read_request_count);
+    fprintf(ssd->statisticfile,"write request average size: %13f\n",ssd->ave_write_size*4/ssd->write_request_count);
     fprintf(ssd->statisticfile,"read request average response time: %lld\n",ssd->read_avg/ssd->read_request_count);
     fprintf(ssd->statisticfile,"write request average response time: %lld\n",ssd->write_avg/ssd->write_request_count);
     fprintf(ssd->statisticfile,"buffer read hits: %13d\n",ssd->dram->buffer->read_hit);
@@ -1191,19 +1333,44 @@ struct ssd_info *no_buffer_distribute(struct ssd_info *ssd)
     last_lpn=(req->lsn+req->size-1)/ssd->parameter->subpage_page;
     first_lpn=req->lsn/ssd->parameter->subpage_page;
 
+    struct last_request *last_request1 = req->last_subs;
+    struct last_request *temp_last_request = NULL;
+
     if(req->operation==READ)        
-    {		
-        while(lpn<=last_lpn) 		
+    {	//printf("10\n");
+        /*while(lpn<=last_lpn) 		
         {
             sub_state=(ssd->dram->map->map_entry[lpn].state&0x7fffffff);
             sub_size=size(sub_state);
             sub=creat_sub_request(ssd,lpn,sub_size,sub_state,req,req->operation);
             lpn++;
+        }*/
+
+        // 遍历子请求链表并处理
+        while (last_request1 != NULL) {
+            // 保存当前的子请求（如果需要做进一步处理，可以在这里进行）
+            temp_last_request = last_request1;
+            lpn = temp_last_request->lsn/ssd->parameter->subpage_page;//printf("11\n");
+            sub_state=(ssd->dram->map->map_entry[lpn].state&0x7fffffff);//printf("12\n");
+            sub_size=size(sub_state);
+            // 处理当前的子请求（如果有处理操作，比如打印、统计等）
+            //printf("Sub Request LSN: %d, Size: %d\n", temp_sub_request->lsn, temp_sub_request->size);
+            sub=creat_sub_request(ssd,lpn,8,0x7fffffff,req,req->operation);
+//printf("13\n");
+            // 将子请求从链表中移除，并释放其内存
+            last_request1 = last_request1->next_node;
+            
+            free(temp_last_request);  // 释放当前子请求的内存
+            
         }
+//printf("14\n");
+        // 清除 request1 中的所有子请求
+        req->last_subs = NULL;  // 现在 request1 不再拥有子请求链表
+        
     }
     else if(req->operation==WRITE)
-    {
-        while(lpn<=last_lpn)     	
+    {   //printf("15\n");
+        /*while(lpn<=last_lpn)     	
         {	
             mask=~(0xffffffff<<(ssd->parameter->subpage_page));
             state=mask;
@@ -1221,7 +1388,25 @@ struct ssd_info *no_buffer_distribute(struct ssd_info *ssd)
 
             sub=creat_sub_request(ssd,lpn,sub_size,state,req,req->operation);
             lpn++;
+        }*/
+
+        
+        
+        while (last_request1 != NULL) {
+
+            temp_last_request = last_request1;
+            lpn = temp_last_request->lsn/ssd->parameter->subpage_page;//printf("16 %d %d\n",temp_last_request->lsn,req->sub_file_num);
+            //if(ssd->model !=3){
+            sub=creat_sub_request(ssd,lpn,8,0x7fffffff,req,req->operation);
+            //}
+            //printf("17 \n");
+            last_request1 = last_request1->next_node;
+            
+            free(temp_last_request);  
+            
         }
+//printf("18\n");
+        req->last_subs = NULL;  
     }
 
     return ssd;

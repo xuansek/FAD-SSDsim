@@ -344,13 +344,22 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
     {
         if (ssd->parameter->dynamic_allocation==0)                      /*表示全动态方式下，也就是channel，chip，die，plane，block等都是动态分配*/
         {
-            channel=ssd->token;
+
+            channel= ssd->token;
             ssd->token=(ssd->token+1)%ssd->parameter->channel_number;
+
             chip=ssd->channel_head[channel].token;
             if(ssd->mail_flag == 1){
                 ssd->channel_head[channel].token=(chip+1)%(ssd->parameter->chip_channel[0]-3);
             }else{
                 ssd->channel_head[channel].token=(chip+1)%ssd->parameter->chip_channel[0];
+            }
+
+            if(ssd->model ==2){
+                int random_channel = rand() % channel_num;
+                int random_chip = rand() % chip_num;
+                channel = random_channel;
+                chip = random_chip;
             }
             
             die=ssd->channel_head[channel].chip_head[chip].token;
@@ -425,6 +434,27 @@ unsigned int get_ppn_for_pre_process(struct ssd_info *ssd,unsigned int lsn)
 
                     break;
                 }
+            case 6:
+                {
+                    
+                    channel = ssd->ssd_token % channel_num;
+                    chip = ssd->ssd_token / channel_num;
+                    if(ssd->model ==2){
+                        int random_channel = rand() % (channel_num-1);
+                        int random_chip = rand() % (chip_num-1);
+                        channel = random_channel;
+                        chip = random_chip;
+                    }
+                    //printf("%d %d %d %d\n",channel_num * chip_num,ssd->ssd_token,channel,chip);
+                    ssd->ssd_token = (ssd->ssd_token +1)%(channel_num * chip_num);
+                    die=ssd->channel_head[channel].chip_head[chip].token;
+                    ssd->channel_head[channel].chip_head[chip].token=(die+1)%ssd->parameter->die_chip;
+                    plane=ssd->channel_head[channel].chip_head[chip].die_head[die].token;
+                    ssd->channel_head[channel].chip_head[chip].die_head[die].token=(plane+1)%ssd->parameter->plane_die;
+                    
+                    
+                    break;
+                }
             default : return 0;
         }
     }
@@ -490,11 +520,11 @@ struct ssd_info *get_ppn(struct ssd_info *ssd,unsigned int channel,unsigned int 
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page++;	
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num--;
 
-    if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>63)
+    /*if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>63)
     {
         printf("error! the last write page larger than 64!!\n");
         while(1){}
-    }
+    }*/
 
     block=active_block;	
     page=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page;	
@@ -618,11 +648,11 @@ unsigned int get_ppn_for_gc(struct ssd_info *ssd,unsigned int channel,unsigned i
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page++;	
     ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].free_page_num--;
 
-    if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>63)
+    /*if(ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page>63)
     {
         printf("error! the last write page larger than 64!!\n");
         while(1){}
-    }
+    }*/
 
     block=active_block;	
     page=ssd->channel_head[channel].chip_head[chip].die_head[die].plane_head[plane].blk_head[active_block].last_write_page;	
